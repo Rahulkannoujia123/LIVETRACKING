@@ -58,7 +58,7 @@ server.listen(port, () => {
 // Create a WebSocket server
 const Driver = require('./src/model/driver.model'); // Import the Driver model
 
-const wss = new WebSocket.Server({ server, path: '/ws' });
+const wss = new WebSocket.Server({ server });
 
 wss.on('connection', function connection(ws) {
   console.log('Client connected');
