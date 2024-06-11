@@ -38,11 +38,6 @@ const server = http.createServer(app);
 
 // Integrate socket.io
 
-
-
-
-
-
 // User Routes
 //app.use('/user', userRoutes);
 
@@ -93,8 +88,21 @@ wss.on('connection', function connection(ws) {
   });
 });
 
+// WebSocket client code
+const wsClient = new WebSocket('wss://livetracking-backend.vercel.app/ws');
 
+wsClient.on('open', () => {
+  console.log('Connected to WebSocket server');
+});
 
-  
+wsClient.on('message', (data) => {
+  console.log('Received message:', data);
+});
 
+wsClient.on('error', (error) => {
+  console.error('WebSocket error:', error);
+});
 
+wsClient.on('close', () => {
+  console.log('WebSocket connection closed');
+});
