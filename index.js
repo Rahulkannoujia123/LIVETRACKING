@@ -1,5 +1,6 @@
 const http = require('http');
 const express = require('express');
+
 const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 
@@ -10,15 +11,10 @@ const Driver = require('./src/model/driver.model');
 require('dotenv').config();
 
 const app = express();
+// console.log(app);
 const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: {
-    origin: "https://livetracking-backend.vercel.app", // Replace with your actual Vercel app URL
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"],
-    credentials: true
-  }
-});
+const io = socketIo(server);
+
 
 // Map to store driver's socket connections by phoneNumber
 const driverSockets = new Map();
@@ -31,6 +27,7 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
   .catch((err) => {
     console.error('Error connecting to MongoDB:', err);
   });
+  // console.log(io);
 
 // Socket.io connection event handler
 io.on('connection', (socket) => {
@@ -43,16 +40,13 @@ io.on('connection', (socket) => {
     driverSockets.set(phoneNumber, socket);
 
     // Set up a change stream to listen for changes in the Driver collection
-    const changeStream = Driver.watch(
-      [{ $match: { 'fullDocument.phoneNumber': phoneNumber } }],
-      { fullDocument: 'updateLookup' }
-    );
+    const changeStream = Driver.watch();
 
-    changeStream.on('change', (change) => {
+    changeStream.on('change', async(change) => {
       console.log('Change occurred:', change);
 
       // Extract the updated document from the change event
-      const updatedDocument = change.fullDocument;
+      const updatedDocument = await Driver.findById(change.documentKey._id);
       console.log('Updated Document:', updatedDocument);
 
       // Emit the updated document to the specific client's socket
