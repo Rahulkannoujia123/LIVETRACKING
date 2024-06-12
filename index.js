@@ -1,100 +1,75 @@
-require('dotenv').config(); // Load environment variables from .env file
-
-const express = require('express');
-const mongoose = require('mongoose');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const path = require('path');
 const http = require('http');
-const WebSocket = require('ws');
+const express = require('express');
+const socketIo = require('socket.io');
+const mongoose = require('mongoose');
+
+// Import the Driver model (assuming you have defined it in a separate file)
+const driver = require('./src/model/driver.model');
+
+// Load environment variables from .env file
+require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3001; // Use port from environment variable or default to 3000
-
-// Middleware
-app.use(cors());
-app.use(bodyParser.json({ limit: '100mb' })); // Adjust the limit as needed
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('Connected to MongoDB');
-})
-.catch((err) => {
-  console.error('Error connecting to MongoDB:', err);
-});
-
-// Serve Uploaded Images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Create HTTP server for socket.io
 const server = http.createServer(app);
+const io = socketIo(server);
 
-// Error Handling Middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+// Map to store driver's socket connections by phoneNumber
+const driverSockets = new Map();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('Error connecting to MongoDB:', err);
+  });
+
+// Set up a change stream to listen for changes in the Driver collection
+
+
+// Socket.io connection event handler
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  // Listen for initial data (phoneNumber) from the client
+  socket.on('phoneNumber', (phoneNumber) => {
+    const changeStream = driver.watch();
+    console.log(changeStream)
+   console.log('Received phoneNumber:', phoneNumber);
+   
+
+changeStream.on('change', async (change) => {
+  
+  console.log('Change occurred:', change);
+
+  // Extract the updated document from the change event
+  const updatedDocument =  await driver.findById(change.documentKey._id);
+  console.log('Updated Document:', updatedDocument);
+
+  // Emit the updated document to all connected sockets
+  io.emit('driverLocation', { latitude: updatedDocument.latitude, longitude: updatedDocument.longitude });
 });
+    // Store the socket connection with phoneNumber
+    driverSockets.set(phoneNumber, socket);
+  });
 
-// Add the trackDriver route
-
-// Start the HTTP server
-server.listen(port, () => {
-  console.log(`Server is listening on http://localhost:${port}`);
-});
-
-// Create a WebSocket server
-const Driver = require('./src/model/driver.model'); // Import the Driver model
-
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-wss.on('connection', function connection(ws) {
-  console.log('Client connected');
-
-  ws.on('message', async function incoming(message) {
-    try {
-      const { phoneNumber } = JSON.parse(message);
-
-      // Fetch driver data from the database based on phoneNumber
-      const driver = await Driver.findOne({ phoneNumber });
-
-      // Check if driver data is found
-      if (!driver) {
-        ws.send(JSON.stringify({ error: 'Driver not found' }));
-        return;
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+    // Remove socket from driverSockets map when disconnected
+    driverSockets.forEach((value, key) => {
+      if (value === socket) {
+        driverSockets.delete(key);
       }
+    });
+  });
 
-      // Extract latitude and longitude from the driver data
-      const { latitude, longitude } = driver;
-
-      // Send latitude and longitude back to the client
-      ws.send(JSON.stringify({ latitude, longitude }));
-    } catch (error) {
-      console.error('Error processing message:', error);
-      ws.send(JSON.stringify({ error: 'Internal Server Error' }));
-    }
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
   });
 });
 
-// WebSocket client code (for testing purposes)
-const wsClient = new WebSocket(`ws://livetracking-backend.vercel.app/ws`);
-
-wsClient.on('open', () => {
-  console.log('Connected to WebSocket server');
-});
-
-wsClient.on('message', (data) => {
-  console.log('Received message:', data);
-});
-
-wsClient.on('error', (error) => {
-  console.error('WebSocket error:', error);
-});
-
-wsClient.on('close', () => {
-  console.log('WebSocket connection closed');
+const port = process.env.PORT || 3001;
+server.listen(port, () => {
+  console.log(`Server is listening on http://localhost:${port}`);
 });
