@@ -1,25 +1,19 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "./index.js",
-        "use": "@vercel/node"
-      }
-    ],
-    
-      "rewrites": [
-        {
-          "source": "/socket.io",
-          "destination": "https://livetracking-backend.vercel.app/socket.io"
-        }
-      ]
-    ,
-    
-  
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/"
-      }
-    ]
+  "version": 2,
+  "builds": [
+    {
+      "src": "./index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/socket.io",
+      "dest": "https://your-backend-server.com/socket.io"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
 }
