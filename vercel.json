@@ -6,6 +6,15 @@
         "use": "@vercel/node"
       }
     ],
+    
+      "rewrites": [
+        {
+          "source": "/socket.io",
+          "destination": "https://livetracking-backend.vercel.app/socket.io"
+        }
+      ]
+    ,
+    
   
     "routes": [
       {
