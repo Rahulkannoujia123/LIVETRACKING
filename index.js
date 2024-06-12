@@ -4,7 +4,7 @@ const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 
 // Import the Driver model (assuming you have defined it in a separate file)
-const driver = require('./src/model/driver.model');
+const Driver = require('./src/model/driver.model');
 
 // Load environment variables from .env file
 require('dotenv').config();
@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "https://livetracking-backend.vercel.app",
+    origin: "https://livetracking-backend.vercel.app", // Replace with your actual Vercel app URL
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
     credentials: true
@@ -32,42 +32,44 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
     console.error('Error connecting to MongoDB:', err);
   });
 
-// Set up a change stream to listen for changes in the Driver collection
-
-
 // Socket.io connection event handler
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  
-  // Listen for initial data (phoneNumber) from the client
+
   socket.on('phoneNumber', (phoneNumber) => {
-    const changeStream = driver.watch();
-    console.log(changeStream)
-   console.log('Received phoneNumber:', phoneNumber);
-   
+    console.log('Received phoneNumber:', phoneNumber);
 
-changeStream.on('change', async (change) => {
-  
-  console.log('Change occurred:', change);
-
-  // Extract the updated document from the change event
-  const updatedDocument =  await driver.findById(change.documentKey._id);
-  console.log('Updated Document:', updatedDocument);
-
-  // Emit the updated document to all connected sockets
-  io.emit('driverLocation', { latitude: updatedDocument.latitude, longitude: updatedDocument.longitude });
-});
     // Store the socket connection with phoneNumber
     driverSockets.set(phoneNumber, socket);
-  });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    // Remove socket from driverSockets map when disconnected
-    driverSockets.forEach((value, key) => {
-      if (value === socket) {
-        driverSockets.delete(key);
+    // Set up a change stream to listen for changes in the Driver collection
+    const changeStream = Driver.watch(
+      [{ $match: { 'fullDocument.phoneNumber': phoneNumber } }],
+      { fullDocument: 'updateLookup' }
+    );
+
+    changeStream.on('change', (change) => {
+      console.log('Change occurred:', change);
+
+      // Extract the updated document from the change event
+      const updatedDocument = change.fullDocument;
+      console.log('Updated Document:', updatedDocument);
+
+      // Emit the updated document to the specific client's socket
+      if (updatedDocument) {
+        socket.emit('driverLocation', { latitude: updatedDocument.latitude, longitude: updatedDocument.longitude });
       }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+      // Remove socket from driverSockets map when disconnected
+      driverSockets.forEach((value, key) => {
+        if (value === socket) {
+          driverSockets.delete(key);
+        }
+      });
+      changeStream.close();
     });
   });
 

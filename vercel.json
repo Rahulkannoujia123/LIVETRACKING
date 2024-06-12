@@ -9,7 +9,7 @@
   "routes": [
     {
       "src": "/socket.io",
-      "dest": "https://livetracking-backend.vercel.app/socket.io"
+      "dest": "/index.js"
     },
     {
       "src": "/(.*)",
