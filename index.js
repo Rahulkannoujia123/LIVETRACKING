@@ -1,38 +1,113 @@
 const http = require('http');
 const express = require('express');
-
 const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 
-// Import the Driver model (assuming you have defined it in a separate file)
+// Import the necessary models
 const Driver = require('./src/model/driver.model');
+const PatientRequest = require('./src/model/patientrequest.model');
 
 // Load environment variables from .env file
 require('dotenv').config();
 
 const app = express();
-// console.log(app);
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Middleware to parse JSON bodies
+app.use(express.json());
 
-// Map to store driver's socket connections by phoneNumber
-const driverSockets = new Map();
+let driverSockets = new Map(); // Map to store driver's socket connections by phoneNumber
+
+// Function to calculate distance between two locations (Haversine formula)
+function getDistance(loc1, loc2) {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const R = 6371; // Radius of the Earth in kilometers
+
+  const dLat = toRad(loc2.latitude - loc1.latitude);
+  const dLon = toRad(loc2.longitude - loc1.longitude);
+  const lat1 = toRad(loc1.latitude);
+  const lat2 = toRad(loc2.latitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in kilometers
+}
+
+// Function to find the nearest active driver
+async function findNearestDriver(pickupLocation) {
+  let nearestDriver = null;
+  let shortestDistance = Infinity;
+
+  const activeDrivers = await Driver.find({ isActive: true });
+
+  for (const driver of activeDrivers) {
+    const distance = getDistance(pickupLocation, driver.location);
+    if (distance < shortestDistance) {
+      shortestDistance = distance;
+      nearestDriver = driver;
+    }
+  }
+
+  return nearestDriver;
+}
 
 // Connect to MongoDB
-mongoose.connect("mongodb+srv://Rahul:myuser@rahul.fack9.mongodb.net/Databaserahul?authSource=admin&replicaSet=atlas-117kuv-shard-0&w=majority&readPreference=primary&retryWrites=true&ssl=true", { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {
     console.log('Connected to MongoDB');
   })
   .catch((err) => {
     console.error('Error connecting to MongoDB:', err);
   });
-  // console.log(io);
 
 // Socket.io connection event handler
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
+  socket.on('registerDriver', async (phoneNumber) => {
+    const driver = await Driver.findOne({ phoneNumber });
+    if (driver) {
+      driverSockets.set(phoneNumber, socket);
+      console.log('Driver registered:', phoneNumber);
+    } else {
+      console.log('Driver not found for phone number:', phoneNumber);
+    }
+  });
+
+  // Handle driver response to request
+  socket.on('requestAccepted', async (data) => {
+    const driver = await Driver.findById(data.driverId);
+    if (driver) {
+      driver.isActive = false;
+      await driver.save();
+      // Emit the response back to the requesting client with driver details
+      io.to(data.clientSocketId).emit('requestAccepted', {
+        driverId: data.driverId,
+        driverPhoneNumber: driver.phoneNumber
+      });
+      console.log(`Driver ${data.driverId} accepted request ${data.requestId}`);
+    }
+  });
+
+  // Handle driver disconnection
+  socket.on('disconnect', () => {
+    for (const [phoneNumber, driverSocket] of driverSockets.entries()) {
+      if (driverSocket === socket) {
+        driverSockets.delete(phoneNumber);
+        console.log('Driver disconnected:', phoneNumber);
+        break;
+      }
+    }
+  });
+
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
+
+  // Handle phoneNumber event
   socket.on('phoneNumber', (phoneNumber) => {
     console.log('Received phoneNumber:', phoneNumber);
 
@@ -42,7 +117,7 @@ io.on('connection', (socket) => {
     // Set up a change stream to listen for changes in the Driver collection
     const changeStream = Driver.watch();
 
-    changeStream.on('change', async(change) => {
+    changeStream.on('change', async (change) => {
       console.log('Change occurred:', change);
 
       // Extract the updated document from the change event
@@ -66,10 +141,26 @@ io.on('connection', (socket) => {
       changeStream.close();
     });
   });
+});
 
-  socket.on('error', (error) => {
-    console.error('Socket error:', error);
-  });
+// Watch the request collection for new requests
+const requestChangeStream = PatientRequest.watch();
+
+requestChangeStream.on('change', async (change) => {
+  if (change.operationType === 'insert') {
+    const newRequest = change.fullDocument;
+    console.log('New request detected:', newRequest);
+
+    const nearestDriver = await findNearestDriver(newRequest.pickupLocation);
+
+    if (nearestDriver && driverSockets.has(nearestDriver.phoneNumber)) {
+      const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
+      driverSocket.emit('newRequest', newRequest);
+      console.log('Request dispatched to driver:', nearestDriver.phoneNumber);
+    } else {
+      console.log('No active drivers available for request:', newRequest.requestId);
+    }
+  }
 });
 
 const port = process.env.PORT || 3001;
