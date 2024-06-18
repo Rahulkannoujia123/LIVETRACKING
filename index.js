@@ -39,11 +39,12 @@ function getDistance(loc1, loc2) {
 }
 
 // Function to find the nearest active driver
-async function findNearestDriver(pickupLocation, excludedDriverIds = []) {
+async function findNearestDriver(pickupLocation, excludedDriverNumber = []) {
+  console.log("in  findNearestDriver ()");
   let nearestDriver = null;
   let shortestDistance = Infinity;
 
-  const activeDrivers = await Driver.find({ isActive: true, _id: { $nin: excludedDriverIds } });
+  const activeDrivers = await Driver.find({ isActive: true, phoneNumber: { $nin: excludedDriverNumber } });
 
   for (const driver of activeDrivers) {
     const distance = getDistance(pickupLocation, driver);
@@ -52,7 +53,7 @@ async function findNearestDriver(pickupLocation, excludedDriverIds = []) {
       nearestDriver = driver;
     }
   }
-
+  console.log("end of the findNearestdata()");
   return nearestDriver;
 }
 
@@ -88,12 +89,19 @@ io.on('connection', (socket) => {
 
   // Handle driver response to request
   socket.on('requestAccepted', async (data) => {
-    const driver = await Driver.findById(data.driverId);
+    console.log("in requestAccepted event =================");
+    console.log(data);
+    console.log("this is the type of the data");
+    console.log(typeof data);
+    const driver = await Driver.findOne({ phoneNumber: data.driverPhoneNumber });
+
+    console.log("after finding the data from db =================");
+
+    console.log(driver);
     if (driver) {
       driver.isActive = false;
       await driver.save();
-
-      const request = await PatientRequest.findById(data.requestId);
+      const request = await PatientRequest.findOne({ requestId: data.requestId });
 
       if (request) {
         // Update the patient request with the ride status, driver number, and driver name
@@ -102,7 +110,7 @@ io.on('connection', (socket) => {
         request.driverName = driver.name;
         await request.save();
 
-        const clientSocket = clientSockets.get(request.clientPhoneNumber);
+        const clientSocket = clientSockets.get(request.patientPhoneNumber);
         if (clientSocket) {
           // Emit the updated request details to the client
           clientSocket.emit('requestAccepted', {
@@ -119,13 +127,16 @@ io.on('connection', (socket) => {
 
   // Handle driver denying the request
   socket.on('requestDenied', async (data) => {
-    console.log(`Driver ${data.driverId} denied request ${data.requestId}`);
-    const deniedDriverId = data.driverId;
-    const patientRequest = await PatientRequest.findById(data.requestId);
+    console.log(`Driver ${data.driverPhoneNumber} denied request ${data.requestId}`);
+    const deniedDriverId = data.driverPhoneNumber;
+    const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+
 
     if (patientRequest) {
+      console.log("in if condistion");
       // Find the next nearest driver excluding the denied driver
       const nearestDriver = await findNearestDriver(patientRequest.pickupLocation, [deniedDriverId]);
+      console.log(nearestDriver);
 
       if (nearestDriver && driverSockets.has(nearestDriver.phoneNumber)) {
         const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
