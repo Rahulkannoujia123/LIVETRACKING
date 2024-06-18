@@ -18,6 +18,7 @@ const io = socketIo(server);
 app.use(express.json());
 
 let driverSockets = new Map(); // Map to store driver's socket connections by phoneNumber
+let clientSockets = new Map(); // Map to store client's socket connections by phoneNumber
 
 // Function to calculate distance between two locations (Haversine formula)
 function getDistance(loc1, loc2) {
@@ -38,11 +39,11 @@ function getDistance(loc1, loc2) {
 }
 
 // Function to find the nearest active driver
-async function findNearestDriver(pickupLocation) {
+async function findNearestDriver(pickupLocation, excludedDriverIds = []) {
   let nearestDriver = null;
   let shortestDistance = Infinity;
 
-  const activeDrivers = await Driver.find({ isActive: true });
+  const activeDrivers = await Driver.find({ isActive: true, _id: { $nin: excludedDriverIds } });
 
   for (const driver of activeDrivers) {
     const distance = getDistance(pickupLocation, driver);
@@ -54,7 +55,6 @@ async function findNearestDriver(pickupLocation) {
 
   return nearestDriver;
 }
-
 
 // Connect to MongoDB
 mongoose.connect("mongodb+srv://Rahul:myuser@rahul.fack9.mongodb.net/Databaserahul?authSource=admin&replicaSet=atlas-117kuv-shard-0&w=majority&readPreference=primary&retryWrites=true&ssl=true")
@@ -71,7 +71,7 @@ io.on('connection', (socket) => {
 
   socket.on('registerDriver', async (phoneNumber) => {
     console.log(phoneNumber);
-    const driver = await Driver.find({ phoneNumber });
+    const driver = await Driver.findOne({ phoneNumber });
     if (driver) {
       driverSockets.set(phoneNumber, socket);
       console.log('Driver registered:', phoneNumber);
@@ -80,19 +80,60 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('registerClient', (phoneNumber) => {
+    console.log(phoneNumber);
+    clientSockets.set(phoneNumber, socket);
+    console.log('Client registered:', phoneNumber);
+  });
+
   // Handle driver response to request
-  // this listent by patient
   socket.on('requestAccepted', async (data) => {
     const driver = await Driver.findById(data.driverId);
     if (driver) {
       driver.isActive = false;
       await driver.save();
-      // Emit the response back to the requesting client with driver details
-      io.to(data.clientSocketId).emit('requestAccepted', {
-        driverId: data.driverId,
-        driverPhoneNumber: driver.phoneNumber
-      });
-      console.log(`Driver ${data.driverId} accepted request ${data.requestId}`);
+
+      const request = await PatientRequest.findById(data.requestId);
+
+      if (request) {
+        // Update the patient request with the ride status, driver number, and driver name
+        request.rideStatus = 'accepted';
+        request.driverPhoneNumber = driver.phoneNumber;
+        request.driverName = driver.name;
+        await request.save();
+
+        const clientSocket = clientSockets.get(request.clientPhoneNumber);
+        if (clientSocket) {
+          // Emit the updated request details to the client
+          clientSocket.emit('requestAccepted', {
+            driverId: data.driverId,
+            driverPhoneNumber: driver.phoneNumber,
+            driverName: driver.name,
+            requestDetails: request
+          });
+        }
+        console.log(`Driver ${data.driverId} accepted request ${data.requestId}`);
+      }
+    }
+  });
+
+  // Handle driver denying the request
+  socket.on('requestDenied', async (data) => {
+    console.log(`Driver ${data.driverId} denied request ${data.requestId}`);
+    const deniedDriverId = data.driverId;
+    const patientRequest = await PatientRequest.findById(data.requestId);
+
+    if (patientRequest) {
+      // Find the next nearest driver excluding the denied driver
+      const nearestDriver = await findNearestDriver(patientRequest.pickupLocation, [deniedDriverId]);
+
+      if (nearestDriver && driverSockets.has(nearestDriver.phoneNumber)) {
+        const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
+        driverSocket.emit('newRequest', patientRequest);
+        console.log('Request reassigned to driver:', nearestDriver.phoneNumber);
+      } else {
+        console.log('No available drivers to reassign the request');
+      }
     }
   });
 
@@ -105,19 +146,20 @@ io.on('connection', (socket) => {
         break;
       }
     }
+    for (const [phoneNumber, clientSocket] of clientSockets.entries()) {
+      if (clientSocket === socket) {
+        clientSockets.delete(phoneNumber);
+        console.log('Client disconnected:', phoneNumber);
+        break;
+      }
+    }
   });
 
   socket.on('error', (error) => {
     console.error('Socket error:', error);
   });
 
-// this is for the watching pateient request and serving to the nearest driver
-
-  
-
   // Handle phoneNumber event
-  // this is for the patient for
-  // to provide live tracking
   socket.on('phoneNumber', (phoneNumber) => {
     console.log('Received phoneNumber:', phoneNumber);
 
@@ -153,8 +195,7 @@ io.on('connection', (socket) => {
   });
 });
 
-
-// this is for the watching pateient request and serving to the nearest driver
+// Watch the request collection for new requests
 const requestChangeStream = PatientRequest.watch();
 
 requestChangeStream.on('change', async (change) => {
@@ -168,25 +209,13 @@ requestChangeStream.on('change', async (change) => {
       const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
       driverSocket.emit('newRequest', newRequest);
       console.log('Request dispatched to driver:', nearestDriver.phoneNumber);
-    } 
-    else{
-      console.log("else");
+    } else {
+      console.log('No available drivers to dispatch the request');
     }
-    // if(nearestDriver!= undefined)
-    //   {
-    //     console.log(driverSockets);
-    //     console.log("we found driver ");
-    //     console.log(nearestDriver);
-    //   }
-    
-  }
-  else{
-    console.log("Some Thing ishappen in patientRequest Document");
+  } else {
+    console.log('Change occurred in patientRequest document');
   }
 });
-// end for above
-// Watch the request collection for new requests
-
 
 const port = process.env.PORT || 3001;
 server.listen(port, () => {
