@@ -45,6 +45,12 @@ async function findNearestDriver(pickupLocation, excludedDriverNumber = []) {
   let nearestDriver = null;
   let shortestDistance = Infinity;
 
+  // Exclude the specific phone number if it's not already in the excluded list
+  const specificDriverPhoneNumber = "9524672598";
+  if (!excludedDriverNumber.includes(specificDriverPhoneNumber)) {
+    excludedDriverNumber.push(specificDriverPhoneNumber);
+  }
+
   const activeDrivers = await Driver.find({ isActive: true, phoneNumber: { $nin: excludedDriverNumber } });
 
   console.log(`Active drivers count: ${activeDrivers.length}`);
@@ -68,7 +74,17 @@ async function findNearestDriver(pickupLocation, excludedDriverNumber = []) {
   } else {
     console.log('No nearest driver found');
   }
-  return nearestDriver;
+
+  // Fetch data for the specific phone number "9524672598"
+  const specificDriver = await Driver.findOne({ phoneNumber: specificDriverPhoneNumber });
+  
+  if (specificDriver) {
+    console.log(`Specific driver data for phone number ${specificDriverPhoneNumber}:`, specificDriver);
+  } else {
+    console.log(`No driver found with phone number ${specificDriverPhoneNumber}`);
+  }
+
+  return { nearestDriver, specificDriver };
 }
 
 
