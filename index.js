@@ -337,17 +337,31 @@ requestChangeStream.on('change', async (change) => {
     const newRequest = change.fullDocument;
     console.log('New request detected:', newRequest);
 
-    const nearestDriver = await findNearestDriver(newRequest.pickupLocation);
+    // Retrieve the specific driver by phone number
+    const driverPhoneNumber = '9524672598'; // Replace with the actual driver's phone number
+    const driver = await Driver.findOne({ phoneNumber: driverPhoneNumber });
 
-    if (nearestDriver && driverSockets.has(nearestDriver.phoneNumber)) {
-      const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
-      driverSocket.emit('newRequest', newRequest);
-      console.log('Request dispatched to driver:', nearestDriver.phoneNumber);
+    if (!driver) {
+      console.log(`Driver with phone number ${driverPhoneNumber} not found`);
+      return;
+    }
+
+    // Check if the driver is active and available
+    if (driver.isActive) {
+      // Emit the request to the driver if their socket connection exists
+      if (driverSockets.has(driver.phoneNumber)) {
+        const driverSocket = driverSockets.get(driver.phoneNumber);
+        driverSocket.emit('newRequest', newRequest);
+        console.log('Request dispatched to driver:', driver.phoneNumber);
+      } else {
+        console.log(`Driver ${driver.phoneNumber} `);
+      }
     } else {
-      console.log('No available drivers to dispatch the request');
+      console.log(`Driver ${driver.phoneNumber} is not active`);
+      // Handle case where driver is not active
     }
   } else {
-    console.log('Change occurred in patientRequest document');
+    console.log('Something happened with PatientRequest document');
   }
 });
 
