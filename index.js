@@ -147,6 +147,98 @@ io.on('connection', (socket) => {
       }
     }
   });
+// cancel ride kal karege
+  socket.on('cancelRide', async (data) => {
+    try {
+      console.log(`Patient ${data.patientPhoneNumber} cancelled request ${data.requestId}`);
+  
+      // Find the patient request
+      const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+  
+      if (patientRequest) {
+        // Update the rideStatus to 'cancelled'
+        patientRequest.rideStatus = 'cancelled';
+        await patientRequest.save();
+  
+        // Retrieve driver's socket using stored phoneNumber
+        const driverSocket = driverSockets.get(patientRequest.driverPhoneNumber);
+  
+        if (driverSocket) {
+          // Emit the cancellation event to the driver
+          driverSocket.emit('rideCancelled', { requestId: data.requestId });
+          console.log(`Notified driver ${patientRequest.driverPhoneNumber} about cancellation of request ${data.requestId}`);
+        } else {
+          console.log(`Driver socket not found for phone number: ${patientRequest.driverPhoneNumber}`);
+        }
+      } else {
+        console.log(`Patient request not found for requestId: ${data.requestId}`);
+      }
+    } catch (error) {
+      console.error('Error handling cancelRide event:', error);
+    }
+  });
+  socket.on('completeRide', async (data) => {
+    try {
+      console.log(`Driver completed ride for request ${data.requestId}`);
+  
+      // Find the patient request
+      const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+  
+      if (patientRequest) {
+        // Update the rideStatus to 'completed'
+        patientRequest.rideStatus = 'completed';
+        await patientRequest.save();
+  
+        // Emit the completed ride details to the patient
+        const patientSocket = clientSockets.get(patientRequest.patientPhoneNumber);
+        if (patientSocket) {
+          patientSocket.emit('rideCompleted', patientRequest);
+          console.log(`Notified patient ${patientRequest.patientPhoneNumber} about completion of request ${data.requestId}`);
+        } else {
+          console.log(`Patient socket not found for phone number: ${patientRequest.patientPhoneNumber}`);
+        }
+  
+        // Emit the completed ride details to the driver
+        const driverSocket = driverSockets.get(patientRequest.driverPhoneNumber);
+        if (driverSocket) {
+          driverSocket.emit('rideCompleted', patientRequest);
+          console.log(`Notified driver ${patientRequest.driverPhoneNumber} about completion of request ${data.requestId}`);
+        } else {
+          console.log(`Driver socket not found for phone number: ${patientRequest.driverPhoneNumber}`);
+        }
+      } else {
+        console.log(`Patient request not found for requestId: ${data.requestId}`);
+      }
+    } catch (error) {
+      console.error('Error handling completeRide event:', error);
+    }
+  });
+  socket.on('dropOff', async (data) => {
+    try {
+      console.log(`Driver notified drop-off for request ${data.requestId}`);
+  
+      // Find the patient request
+      const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+  
+      if (patientRequest) {
+        // Emit the drop-off notification to the patient
+        const patientSocket = clientSockets.get(patientRequest.patientPhoneNumber);
+        if (patientSocket) {
+          patientSocket.emit('dropOffNotified', { requestId: data.requestId });
+          console.log(`Notified patient ${patientRequest.patientPhoneNumber} about drop-off for request ${data.requestId}`);
+        } else {
+          console.log(`Patient socket not found for phone number: ${patientRequest.patientPhoneNumber}`);
+        }
+      } else {
+        console.log(`Patient request not found for requestId: ${data.requestId}`);
+      }
+    } catch (error) {
+      console.error('Error handling dropOff event:', error);
+    }
+  });
+  
+
+  
 
   // Handle driver disconnection
   socket.on('disconnect', () => {
