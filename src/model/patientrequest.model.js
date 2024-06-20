@@ -15,13 +15,13 @@ const patientrequestSchema = new Schema({
     patientPhoneNumber: String,
     rideStatus: {
         type: String,
-        enum: ['accepted', 'pending', 'completed'],
+        enum: ['accepted', 'pending', 'completed','cancelled'],
         default: 'pending'
     },
     driverPhoneNumber: String,
     paymentStatus: {
         type: String,
-        enum: ['pending', 'completed'],
+        enum: ['pending', 'completed',],
         default: 'pending'
     },
     timestamp: {
