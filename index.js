@@ -39,53 +39,46 @@ function getDistance(loc1, loc2) {
 }
 
 // Function to find the nearest active driver
-async function findNearestDriver(pickupLocation, excludedDriverNumber = []) {
-  console.log("in findNearestDriver ()");
-  
-  let nearestDriver = null;
-  let shortestDistance = Infinity;
+// Function to find the nearest active driver
+async function findNearestDriver(pickupLocation, excludedDriverNumbers = []) {
+  console.log("in findNearestDriver()");
 
-  // Exclude the specific phone number if it's not already in the excluded list
-  const specificDriverPhoneNumber = "9524672598";
-  if (!excludedDriverNumber.includes(specificDriverPhoneNumber)) {
-    excludedDriverNumber.push(specificDriverPhoneNumber);
-  }
+  try {
+    let nearestDriver = null;
+    let shortestDistance = Infinity;
 
-  const activeDrivers = await Driver.find({ isActive: true, phoneNumber: { $nin: excludedDriverNumber } });
+    const activeDrivers = await Driver.find({ isActive: true, phoneNumber: { $nin: excludedDriverNumbers } });
 
-  console.log(`Active drivers count: ${activeDrivers.length}`);
-  if (activeDrivers.length === 0) {
-    console.log('No active drivers available');
-  }
-
-  for (const driver of activeDrivers) {
-    const distance = getDistance(pickupLocation, driver);
-    console.log(`Distance to driver ${driver.phoneNumber}: ${distance} km`);
-    
-    if (distance < shortestDistance) {
-      shortestDistance = distance;
-      nearestDriver = driver;
+    console.log(`Active drivers count: ${activeDrivers.length}`);
+    if (activeDrivers.length === 0) {
+      console.log('No active drivers available');
+      return { nearestDriver: null, shortestDistance: Infinity };
     }
-  }
-  
-  console.log("end of the findNearestdata()");
-  if (nearestDriver) {
-    console.log(`Nearest driver found: ${nearestDriver.phoneNumber} at distance ${shortestDistance} km`);
-  } else {
-    console.log('No nearest driver found');
-  }
 
-  // Fetch data for the specific phone number "9524672598"
-  const specificDriver = await Driver.findOne({ phoneNumber: specificDriverPhoneNumber });
-  
-  if (specificDriver) {
-    console.log(`Specific driver data for phone number ${specificDriverPhoneNumber}:`, specificDriver);
-  } else {
-    console.log(`No driver found with phone number ${specificDriverPhoneNumber}`);
-  }
+    for (const driver of activeDrivers) {
+      const distance = getDistance(pickupLocation, driver);
+      console.log(`Distance to driver ${driver.phoneNumber}: ${distance} km`);
 
-  return { nearestDriver, specificDriver };
+      if (distance < shortestDistance) {
+        shortestDistance = distance;
+        nearestDriver = driver;
+      }
+    }
+
+    console.log("end of the findNearestDriver()");
+    if (nearestDriver) {
+      console.log(`Nearest driver found: ${nearestDriver.phoneNumber} at distance ${shortestDistance} km`);
+    } else {
+      console.log('No nearest driver found');
+    }
+
+    return { nearestDriver, shortestDistance };
+  } catch (error) {
+    console.error('Error in findNearestDriver:', error);
+    return { nearestDriver: null, shortestDistance: Infinity };
+  }
 }
+
 
 
 // Connect to MongoDB
@@ -337,33 +330,27 @@ requestChangeStream.on('change', async (change) => {
     const newRequest = change.fullDocument;
     console.log('New request detected:', newRequest);
 
-    // Retrieve the specific driver by phone number
-    const driverPhoneNumber = '9524672598'; // Replace with the actual driver's phone number
-    const driver = await Driver.findOne({ phoneNumber: driverPhoneNumber });
+    // Find the nearest driver excluding none initially
+    const { nearestDriver, shortestDistance } = await findNearestDriver(newRequest.pickupLocation);
 
-    if (!driver) {
-      console.log(`Driver with phone number ${driverPhoneNumber} not found`);
-      return;
-    }
-
-    // Check if the driver is active and available
-    if (driver.isActive) {
-      // Emit the request to the driver if their socket connection exists
-      if (driverSockets.has(driver.phoneNumber)) {
-        const driverSocket = driverSockets.get(driver.phoneNumber);
+    if (nearestDriver && shortestDistance !== Infinity) {
+      // Emit the request to the nearest driver if their socket connection exists
+      if (driverSockets.has(nearestDriver.phoneNumber)) {
+        const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
         driverSocket.emit('newRequest', newRequest);
-        console.log('Request dispatched to driver:', driver.phoneNumber);
+        console.log(`Request dispatched to driver: ${nearestDriver.phoneNumber}`);
       } else {
-        console.log(`Driver ${driver.phoneNumber} `);
+        console.log(`Driver socket not found for phone number: ${nearestDriver.phoneNumber}`);
       }
     } else {
-      console.log(`Driver ${driver.phoneNumber} is not active`);
-      // Handle case where driver is not active
+      console.log('No available drivers to handle the new request');
     }
   } else {
     console.log('Something happened with PatientRequest document');
   }
 });
+
+
 
 
 const port = process.env.PORT || 3001;
