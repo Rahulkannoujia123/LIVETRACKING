@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Driver = require('./driver.model');
 const Schema = mongoose.Schema;
 
 const patientrequestSchema = new Schema({
@@ -19,6 +20,7 @@ const patientrequestSchema = new Schema({
         default: 'pending'
     },
     driverPhoneNumber: String,
+    driverName:String,
     paymentStatus: {
         type: String,
         enum: ['pending', 'completed',],
