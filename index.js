@@ -211,6 +211,7 @@ io.on('connection', (socket) => {
       if (patientRequest) {
         // Update the rideStatus to 'completed'
         patientRequest.rideStatus = 'completed';
+        patientRequest.paymentStatus='completed'
         await patientRequest.save();
   
         // Emit the completed ride details to the patient
