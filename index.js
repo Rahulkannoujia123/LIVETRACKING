@@ -95,10 +95,12 @@ io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
   socket.on('registerDriver', async (phoneNumber) => {
-    console.log(phoneNumber);
+    console.log(typeof phoneNumber);
     const driver = await Driver.findOne({ phoneNumber });
     if (driver) {
       driverSockets.set(phoneNumber, socket);
+      console.log("=============verify=============");
+      console.log(driverSockets.has(phoneNumber));
       console.log('Driver registered:', phoneNumber);
     } else {
       console.log('Driver not found for phone number:', phoneNumber);
@@ -131,10 +133,11 @@ io.on('connection', (socket) => {
         // Update the patient request with the ride status, driver number, and driver name
         request.rideStatus = 'accepted';
         request.driverPhoneNumber = driver.phoneNumber;
-        request.driverName = driver.name;
+        request.driverName = `${driver.firstName} ${driver.lastName}`;
         await request.save();
+        console.log("Driver information saved successfully");
 
-        const clientSocket = clientSockets.get(request.patientPhoneNumber);
+        const clientSocket = clientSockets.get(Number(request.patientPhoneNumber));
         if (clientSocket) {
           // Emit the updated request details to the client
           clientSocket.emit('requestAccepted', {
@@ -185,7 +188,7 @@ io.on('connection', (socket) => {
         await patientRequest.save();
   
         // Retrieve driver's socket using stored phoneNumber
-        const driverSocket = driverSockets.get(patientRequest.driverPhoneNumber);
+        const driverSocket = driverSockets.get(Number(patientRequest.driverPhoneNumber));
   
         if (driverSocket) {
           // Emit the cancellation event to the driver
@@ -334,9 +337,16 @@ requestChangeStream.on('change', async (change) => {
     const { nearestDriver, shortestDistance } = await findNearestDriver(newRequest.pickupLocation);
 
     if (nearestDriver && shortestDistance !== Infinity) {
+      console.log("this is driverSocket ");
+      console.log(driverSockets);
+      console.log("Driver data========================");
+      console.log(nearestDriver);
+      console.log("=================================================");
+      console.log(driverSockets.has(Number(nearestDriver.phoneNumber)))
+      // 8828456655 
       // Emit the request to the nearest driver if their socket connection exists
-      if (driverSockets.has(nearestDriver.phoneNumber)) {
-        const driverSocket = driverSockets.get(nearestDriver.phoneNumber);
+      if (driverSockets.has(Number(nearestDriver.phoneNumber))) {
+        const driverSocket = driverSockets.get(Number(nearestDriver.phoneNumber));
         driverSocket.emit('newRequest', newRequest);
         console.log(`Request dispatched to driver: ${nearestDriver.phoneNumber}`);
       } else {
