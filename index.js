@@ -99,8 +99,9 @@ io.on('connection', (socket) => {
     const driver = await Driver.findOne({ phoneNumber });
     if (driver) {
       driverSockets.set(phoneNumber, socket);
+      
       console.log("=============verify=============");
-      console.log(driverSockets.has(phoneNumber));
+      console.log(driverSockets.size);
       console.log('Driver registered:', phoneNumber);
     } else {
       console.log('Driver not found for phone number:', phoneNumber);
