@@ -141,12 +141,8 @@ io.on('connection', (socket) => {
         const clientSocket = clientSockets.get(Number(request.patientPhoneNumber));
         if (clientSocket) {
           // Emit the updated request details to the client
-          clientSocket.emit('requestAccepted', {
-            driverId: data.driverId,
-            driverPhoneNumber: driver.phoneNumber,
-            driverName: driver.name,
-            requestDetails: request
-          });
+          clientSocket.emit('requestAccepted', request
+          );
         }
         console.log(`Driver ${data.driverId} accepted request ${data.requestId}`);
       }
@@ -218,25 +214,15 @@ io.on('connection', (socket) => {
         await patientRequest.save();
   
         // Emit the completed ride details to the patient
-        const patientSocket = clientSockets.get(patientRequest.patientPhoneNumber);
+        const patientSocket = clientSockets.get(Number(patientRequest.patientPhoneNumber));
         if (patientSocket) {
           patientSocket.emit('rideCompleted', patientRequest);
           console.log(`Notified patient ${patientRequest.patientPhoneNumber} about completion of request ${data.requestId}`);
         } else {
           console.log(`Patient socket not found for phone number: ${patientRequest.patientPhoneNumber}`);
         }
-  
-        // Emit the completed ride details to the driver
-        const driverSocket = driverSockets.get(patientRequest.driverPhoneNumber);
-        if (driverSocket) {
-          driverSocket.emit('rideCompleted', patientRequest);
-          console.log(`Notified driver ${patientRequest.driverPhoneNumber} about completion of request ${data.requestId}`);
-        } else {
-          console.log(`Driver socket not found for phone number: ${patientRequest.driverPhoneNumber}`);
-        }
-      } else {
-        console.log(`Patient request not found for requestId: ${data.requestId}`);
       }
+  
     } catch (error) {
       console.error('Error handling completeRide event:', error);
     }
@@ -250,7 +236,7 @@ io.on('connection', (socket) => {
   
       if (patientRequest) {
         // Emit the drop-off notification to the patient
-        const patientSocket = clientSockets.get(patientRequest.patientPhoneNumber);
+        const patientSocket = clientSockets.get(Number(patientRequest.patientPhoneNumber));
         if (patientSocket) {
           patientSocket.emit('dropOffNotified', { requestId: data.requestId });
           console.log(`Notified patient ${patientRequest.patientPhoneNumber} about drop-off for request ${data.requestId}`);
