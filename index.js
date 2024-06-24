@@ -316,25 +316,61 @@ io.on('connection', (socket) => {
 // Watch the request collection for new requests
 const requestChangeStream = PatientRequest.watch();
 
+// requestChangeStream.on('change', async (change) => {
+//   if (change.operationType === 'insert') {
+//     const newRequest = change.fullDocument;
+//     console.log('New request detected:', newRequest);
+//     console.log('Date:', newRequest.Date);
+//     console.log('Time:', newRequest.Time);
+//     // Find the nearest driver excluding none initially
+//     const { nearestDriver, shortestDistance } = await findNearestDriver(newRequest.pickupLocation);
+
+//     if (nearestDriver && shortestDistance !== Infinity) {
+//       console.log("this is driverSocket ");
+//       console.log(driverSockets);
+//       console.log("Driver data========================");
+//       console.log(nearestDriver);
+//       console.log("=================================================");
+//       console.log(driverSockets.has(Number(nearestDriver.phoneNumber)))
+//       // 8828456655 
+   
+
+    
+//       // Emit the request to the nearest driver if their socket connection exists
+//       if (driverSockets.has(Number(nearestDriver.phoneNumber))) {
+//         const driverSocket = driverSockets.get(Number(nearestDriver.phoneNumber));
+//         driverSocket.emit('newRequest', newRequest);
+//         console.log(`Request dispatched to driver: ${nearestDriver.phoneNumber}`);
+//       } else {
+//         console.log(`Driver socket not found for phone number: ${nearestDriver.phoneNumber}`);
+//       }
+//     } else {
+//       console.log('No available drivers to handle the new request');
+//     }
+//   } else {
+//     console.log('Something happened with PatientRequest document');
+//   }
+// });
+
+
 requestChangeStream.on('change', async (change) => {
   if (change.operationType === 'insert') {
     const newRequest = change.fullDocument;
     console.log('New request detected:', newRequest);
 
+    // Check if Date and Time fields are present in newRequest
+    console.log('Date:', newRequest.Date);
+    console.log('Time:', newRequest.Time);
+
     // Find the nearest driver excluding none initially
     const { nearestDriver, shortestDistance } = await findNearestDriver(newRequest.pickupLocation);
 
     if (nearestDriver && shortestDistance !== Infinity) {
-      console.log("this is driverSocket ");
-      console.log(driverSockets);
-      console.log("Driver data========================");
-      console.log(nearestDriver);
-      console.log("=================================================");
-      console.log(driverSockets.has(Number(nearestDriver.phoneNumber)))
-      // 8828456655 
       // Emit the request to the nearest driver if their socket connection exists
       if (driverSockets.has(Number(nearestDriver.phoneNumber))) {
         const driverSocket = driverSockets.get(Number(nearestDriver.phoneNumber));
+
+        // Emit the event with newRequest including Date and Time
         driverSocket.emit('newRequest', newRequest);
         console.log(`Request dispatched to driver: ${nearestDriver.phoneNumber}`);
       } else {
@@ -347,8 +383,6 @@ requestChangeStream.on('change', async (change) => {
     console.log('Something happened with PatientRequest document');
   }
 });
-
-
 
 
 const port = process.env.PORT || 3001;
