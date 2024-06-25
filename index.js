@@ -135,6 +135,7 @@ io.on('connection', (socket) => {
         request.rideStatus = 'accepted';
         request.driverPhoneNumber = driver.phoneNumber;
         request.driverName = `${driver.firstName} ${driver.lastName}`;
+        request.rating=driver.rating;
         await request.save();
         console.log("Driver information saved successfully");
 
