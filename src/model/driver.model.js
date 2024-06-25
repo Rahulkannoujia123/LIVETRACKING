@@ -16,6 +16,7 @@ const driverSchema = new mongoose.Schema({
     image: String,
     latitude:String,
     longitude:String, 
+    rating: { type: Number, default: 0, min: 0, max: 5 },
     // Corrected image field definition
     isActive: {
         type: Boolean,
