@@ -254,7 +254,29 @@ io.on('connection', (socket) => {
   });
   
   // he
-
+ socket.on('dropOff', async (data) => {
+    try {
+      console.log(`Driver notified drop-off for request ${data.requestId}`);
+  
+      // Find the patient request
+      const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+  
+      if (patientRequest) {
+        // Emit the drop-off notification to the patient
+        const patientSocket = clientSockets.get(Number(patientRequest.patientPhoneNumber));
+        if (patientSocket) {
+          patientSocket.emit('dropOffNotified', { requestId: data.requestId });
+          console.log(`Notified patient ${patientRequest.patientPhoneNumber} about drop-off for request ${data.requestId}`);
+        } else {
+          console.log(`Patient socket not found for phone number: ${patientRequest.patientPhoneNumber}`);
+        }
+      } else {
+        console.log(`Patient request not found for requestId: ${data.requestId}`);
+      }
+    } catch (error) {
+      console.error('Error handling dropOff event:', error);
+    }
+  });
   
 
   // Handle driver disconnection
