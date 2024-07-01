@@ -379,11 +379,19 @@ requestChangeStream.on('change', async (change) => {
       }
     } else {
       console.log('No available drivers to handle the new request');
+      await PatientRequest.findOneAndDelete({ requestId: newRequest.requestId });
+      const clientSocket = clientSockets.get(Number(newRequest.patientPhoneNumber));
+      if (clientSocket) {
+        clientSocket.emit('noDriversAvailable', { requestId: newRequest.requestId });
+      }
     }
   } else {
     console.log('Something happened with PatientRequest document');
   }
 });
+
+
+
 
 
 const port = process.env.PORT || 3001;
