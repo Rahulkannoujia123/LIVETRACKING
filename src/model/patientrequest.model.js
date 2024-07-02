@@ -26,10 +26,16 @@ const patientrequestSchema = new Schema({
         enum: ['pending', 'completed',],
         default: 'pending'
     },
+    paymentMethod: String,
+    paymentId: String,
     rating:Number,
-    timestamp: {
-        type: Date,
-        default: Date.now
+    Date: {
+        type: String, // Store date as a string in YYYY-MM-DD format
+      
+    },
+    Time: {
+        type: String, // Store time as a string in HH:mm format
+     
     },
     distance: Number, // New field to store distance in kilometers
     fare: Number,     // New field to store fare in Rs

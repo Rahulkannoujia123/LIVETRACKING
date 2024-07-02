@@ -278,6 +278,50 @@ io.on('connection', (socket) => {
     }
   });
   
+// Handle payment completion
+socket.on('paymentCompleted', async (data) => {
+  console.log("in paymentCompleted event =================");
+  console.log(data);
+  console.log("this is the type of the data");
+  console.log(typeof data);
+
+  const { requestId, paymentId, paymentStatus, paymentMethod } = data;
+
+  try {
+    const request = await PatientRequest.findOne({ requestId });
+
+    if (request) {
+      request.paymentStatus = paymentStatus;
+      request.paymentMethod = paymentMethod;
+      request.paymentId = paymentId;
+      await request.save();
+
+      console.log("Payment information saved successfully");
+
+      const driverPhoneNumber = Number(request.driverPhoneNumber);
+
+      const driverSocket = driverSockets.get(driverPhoneNumber);
+      console.log(driverSocket);
+     
+      if (driverSocket) {
+        console.log("Patient socket found for phone number:", driverPhoneNumber);
+        // Emit the updated payment details to the client
+        driverSocket.emit('paymentStatusUpdated', request);
+        console.log('paymentStatusUpdated event emitted to client');
+      } else {
+        console.log(`Client socket not found for phone number: ${driverPhoneNumber}`);
+        console.log("Current clientSockets map:", Array.from(driverSockets.keys()));
+      }
+      console.log(`Payment for request ${requestId} completed`);
+    } else {
+      console.log(`Request not found for requestId: ${requestId}`);
+    }
+  } catch (error) {
+    console.error('Error handling paymentCompleted event:', error);
+  }
+}
+);
+
 
   // Handle driver disconnection
   socket.on('disconnect', () => {
