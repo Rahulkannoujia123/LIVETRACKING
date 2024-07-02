@@ -26,6 +26,7 @@ const patientrequestSchema = new Schema({
         enum: ['pending', 'completed',],
         default: 'pending'
     },
+    rating:Number,
     timestamp: {
         type: Date,
         default: Date.now
