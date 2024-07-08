@@ -322,6 +322,30 @@ socket.on('paymentCompleted', async (data) => {
 }
 );
 
+  socket.on("paymentMathod",async (data)=>{
+  try {
+    // console.log(`Driver completed ride for request ${data.requestId}`);
+
+    // Find the patient request
+    const patientRequest = await PatientRequest.findOne({ requestId: data.requestId });
+
+    if (patientRequest) {
+      patientRequest.paymentStatus=data.paymentMethod;
+      await patientRequest.save();
+
+      // Emit the completed ride details to the patient
+      const driverSocket = driverSockets.get(Number(patientRequest.patientPhoneNumber));
+      if (driverSocket) {
+        driverSocket.emit('paymentMathodNotified', patientRequest);
+     } else {
+        console.log(`driver socket not found for phone number: ${patientRequest.driverPhoneNumber}`);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error handling paymentMethod event:', error);
+  }
+});
 
   // Handle driver disconnection
   socket.on('disconnect', () => {
