@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 // Import the necessary models
 const Driver = require('./src/model/driver.model');
 const PatientRequest = require('./src/model/patientrequest.model');
+const Salesman=require('./src/model/salesman.model')
 
 // Load environment variables from .env file
 require('dotenv').config();
@@ -18,7 +19,8 @@ const io = socketIo(server);
 app.use(express.json());
 
 let driverSockets = new Map(); // Map to store driver's socket connections by phoneNumber
-let clientSockets = new Map(); // Map to store client's socket connections by phoneNumber
+let clientSockets = new Map();
+let salesmanSockets = new Map(); // Map to store client's socket connections by phoneNumber
 
 // Function to calculate distance between two locations (Haversine formula)
 function getDistance(loc1, loc2) {
@@ -358,6 +360,9 @@ socket.on('paymentCompleted', async (data) => {
   });
 });
 
+
+
+
 // Watch the request collection for new requests
 const requestChangeStream = PatientRequest.watch();
 
@@ -434,6 +439,63 @@ requestChangeStream.on('change', async (change) => {
   }
 });
 
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  // Existing code...
+
+  // Handle registering a salesman
+  socket.on('registerSalesman', (userId) => {
+    console.log(userId);
+    salesmanSockets.set(userId, socket);
+    console.log('Salesman registered:', userId);
+  });
+
+  // Handle location updates from salesmen
+  socket.on('updateLocation', async (data) => {
+    const { userId, location } = data;
+    console.log(`Salesman ${userId} updated location:`, location);
+
+    // Update the salesman's location in the database
+    const salesman = await Salesman.findOne({ userId });
+    if (salesman) {
+      salesman.location = location;
+      await salesman.save();
+      console.log(`Salesman ${userId} location updated in the database.`);
+    } else {
+      console.log(`Salesman not found for userId: ${userId}`);
+    }
+
+    // Emit the location update to the admin
+    io.emit('salesmanLocationUpdate', { userId, location });
+  });
+
+  // Handle salesman disconnection
+  socket.on('disconnect', () => {
+    for (const [userId, salesmanSocket] of salesmanSockets.entries()) {
+      if (salesmanSocket.id === socket.id) {
+        salesmanSockets.delete(userId);
+        console.log('Salesman disconnected:', userId);
+        break;
+      }
+    }
+
+    // Clean up the driver and client maps
+    driverSockets.forEach((s, phoneNumber) => {
+      if (s.id === socket.id) {
+        driverSockets.delete(phoneNumber);
+      }
+    });
+
+    clientSockets.forEach((s, phoneNumber) => {
+      if (s.id === socket.id) {
+        clientSockets.delete(phoneNumber);
+      }
+    });
+  });
+
+  // Additional existing code...
+});
 
 
 
